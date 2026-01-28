@@ -17,34 +17,67 @@ function getBasket() {
   }
 }
 
+// Track how many free oranges have been granted to the user.
+// This prevents auto-removal when apples drop; oranges are only auto-added
+// when the apple count crosses thresholds upward.
+function getGrantedFreeOranges() {
+  const v = parseInt(localStorage.getItem("grantedFreeOranges") || "0", 10);
+  return Number.isFinite(v) ? Math.max(0, v) : 0;
+}
+function setGrantedFreeOranges(n) {
+  localStorage.setItem("grantedFreeOranges", String(Math.max(0, Math.floor(n || 0))));
+}
+function incGrantedFreeOranges(delta = 1) {
+  setGrantedFreeOranges(getGrantedFreeOranges() + delta);
+}
+
 function addToBasket(product) {
   const basket = getBasket();
   // add requested product
   basket.push(product);
-
-  // compute how many free oranges should be present
+  // compute how many free oranges should be present based on apples
+  // We only auto-add oranges when crossing thresholds upward; we do NOT
+  // auto-remove oranges when apples drop. The number of already granted
+  // free oranges is tracked in `grantedFreeOranges` in localStorage.
   const appleCount = basket.filter((p) => p === "apple").length;
-  const desiredFreeOranges = Math.floor(appleCount / 4);
-  const currentOranges = basket.filter((p) => p === "orange").length;
+  const desiredTotalFreeOranges = Math.floor(appleCount / 4);
+  const granted = getGrantedFreeOranges();
 
-  if (currentOranges < desiredFreeOranges) {
-    // add missing free oranges
-    for (let i = 0; i < desiredFreeOranges - currentOranges; i++) {
+  if (desiredTotalFreeOranges > granted) {
+    // add newly earned free oranges
+    const toAdd = desiredTotalFreeOranges - granted;
+    for (let i = 0; i < toAdd; i++) {
       basket.push("orange");
     }
-  } else if (currentOranges > desiredFreeOranges) {
-    // remove surplus oranges (remove last occurrences)
-    for (let i = 0; i < currentOranges - desiredFreeOranges; i++) {
-      const idx = basket.lastIndexOf("orange");
-      if (idx !== -1) basket.splice(idx, 1);
-    }
+    setGrantedFreeOranges(desiredTotalFreeOranges);
   }
 
   localStorage.setItem("basket", JSON.stringify(basket));
 }
 
+// Remove a single item by array index and resync free oranges
+function removeFromBasket(index) {
+  const basket = getBasket();
+  if (index < 0 || index >= basket.length) return;
+  const removedItem = basket[index];
+  // If user explicitly removes an orange, decrement granted counter so
+  // it won't be considered granted anymore. Oranges are only re-added
+  // when apples cross thresholds upward (see addToBasket).
+  if (removedItem === "orange") {
+    const granted = getGrantedFreeOranges();
+    setGrantedFreeOranges(Math.max(0, granted - 1));
+  }
+  basket.splice(index, 1);
+
+  localStorage.setItem("basket", JSON.stringify(basket));
+  renderBasket();
+  renderBasketIndicator();
+}
+
 function clearBasket() {
   localStorage.removeItem("basket");
+  // clearing basket should also reset suppressed free oranges
+  setGrantedFreeOranges(0);
 }
 
 function renderBasket() {
@@ -58,13 +91,23 @@ function renderBasket() {
     if (cartButtonsRow) cartButtonsRow.style.display = "none";
     return;
   }
-  basket.forEach((product) => {
+  basket.forEach((product, idx) => {
     const item = PRODUCTS[product];
     if (item) {
       const li = document.createElement("li");
       // mark oranges as free in the display
       const displayName = product === "orange" ? `${item.name} (free)` : item.name;
       li.innerHTML = `<span class='basket-emoji'>${item.emoji}</span> <span>${displayName}</span>`;
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "remove-item-btn";
+      removeBtn.setAttribute("aria-label", `Remove ${item.name}`);
+      removeBtn.textContent = "−";
+      removeBtn.onclick = function () {
+        removeFromBasket(idx);
+      };
+      li.appendChild(removeBtn);
+
       basketList.appendChild(li);
     }
   });
@@ -100,10 +143,12 @@ if (document.readyState !== "loading") {
 const origAddToBasket = window.addToBasket;
 window.addToBasket = function (product) {
   origAddToBasket(product);
+  renderBasket();
   renderBasketIndicator();
 };
 const origClearBasket = window.clearBasket;
 window.clearBasket = function () {
   origClearBasket();
+  renderBasket();
   renderBasketIndicator();
 };
