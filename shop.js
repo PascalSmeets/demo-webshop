@@ -2,6 +2,7 @@ const PRODUCTS = {
   apple: { name: "Apple", emoji: "🍏" },
   banana: { name: "Banana", emoji: "🍌" },
   lemon: { name: "Lemon", emoji: "🍋" },
+  orange: { name: "Orange", emoji: "🍊" },
 };
 
 function getBasket() {
@@ -18,7 +19,27 @@ function getBasket() {
 
 function addToBasket(product) {
   const basket = getBasket();
+  // add requested product
   basket.push(product);
+
+  // compute how many free oranges should be present
+  const appleCount = basket.filter((p) => p === "apple").length;
+  const desiredFreeOranges = Math.floor(appleCount / 4);
+  const currentOranges = basket.filter((p) => p === "orange").length;
+
+  if (currentOranges < desiredFreeOranges) {
+    // add missing free oranges
+    for (let i = 0; i < desiredFreeOranges - currentOranges; i++) {
+      basket.push("orange");
+    }
+  } else if (currentOranges > desiredFreeOranges) {
+    // remove surplus oranges (remove last occurrences)
+    for (let i = 0; i < currentOranges - desiredFreeOranges; i++) {
+      const idx = basket.lastIndexOf("orange");
+      if (idx !== -1) basket.splice(idx, 1);
+    }
+  }
+
   localStorage.setItem("basket", JSON.stringify(basket));
 }
 
@@ -41,7 +62,9 @@ function renderBasket() {
     const item = PRODUCTS[product];
     if (item) {
       const li = document.createElement("li");
-      li.innerHTML = `<span class='basket-emoji'>${item.emoji}</span> <span>${item.name}</span>`;
+      // mark oranges as free in the display
+      const displayName = product === "orange" ? `${item.name} (free)` : item.name;
+      li.innerHTML = `<span class='basket-emoji'>${item.emoji}</span> <span>${displayName}</span>`;
       basketList.appendChild(li);
     }
   });

@@ -1,0 +1,11 @@
+{
+  "name": "demo-webshop-tests",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test:free-orange": "node tests/free-orange.playwright.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.58.0"
+  }
+}
